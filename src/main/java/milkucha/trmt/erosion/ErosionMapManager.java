@@ -18,7 +18,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.dimension.DimensionType;
 
 import java.util.ArrayList;
 import java.util.Collections;
