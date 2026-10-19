@@ -6,6 +6,7 @@ import milkucha.trmt.TRMTConfig;
 import milkucha.trmt.block.ErodedGrassBlock;
 import milkucha.trmt.network.SyncChunkPayload;
 import milkucha.trmt.network.UpdateStagePayload;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -17,6 +18,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.dimension.DimensionType;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -309,30 +312,31 @@ public class ErosionMapManager {
     // --- Networking ---
 
     public void sendFullSyncToPlayer(ServerPlayer player) {
-        if (state == null) return;
-        for (Map.Entry<ChunkPos, ChunkErosionMap> chunkEntry : state.getAllChunkMaps().entrySet()) {
-            ChunkPos chunkPos = chunkEntry.getKey();
-            Map<BlockPos, ErosionEntry> entries = chunkEntry.getValue().getEntries();
-            if (entries.isEmpty()) continue;
+        if (state == null || player.level().dimension() != Level.OVERWORLD) return;
 
-            List<SyncChunkPayload.Entry> payloadEntries = new ArrayList<>(entries.size());
-            for (Map.Entry<BlockPos, ErosionEntry> e : entries.entrySet()) {
-                payloadEntries.add(new SyncChunkPayload.Entry(
-                    e.getKey(),
-                    e.getValue().getErosionStage(),
-                    e.getValue().getWalkedOnCount(),
-                    e.getValue().getThreshold(),
-                    e.getValue().getLastTouchedGameTime()
-                ));
-            }
-            ServerPlayNetworking.send(player, new SyncChunkPayload(chunkPos.x(), chunkPos.z(), payloadEntries));
-        }
+		player.getChunkTrackingView().forEach((chunkPos) -> {
+			ChunkErosionMap map = state.getChunkMap(chunkPos);
+			if (map != null) {
+				Map<BlockPos, ErosionEntry> entries = map.getEntries();
+				List<SyncChunkPayload.Entry> payloadEntries = new ArrayList<>(entries.size());
+				for (Map.Entry<BlockPos, ErosionEntry> e : entries.entrySet()) {
+					payloadEntries.add(new SyncChunkPayload.Entry(
+						e.getKey(),
+						e.getValue().getErosionStage(),
+						e.getValue().getWalkedOnCount(),
+						e.getValue().getThreshold(),
+						e.getValue().getLastTouchedGameTime()
+					));
+				}
+				ServerPlayNetworking.send(player, new SyncChunkPayload(chunkPos.x(), chunkPos.z(), payloadEntries));
+			}
+		});
     }
 
     private void broadcastStageUpdate(BlockPos pos, int stage, float walkedOnCount, float threshold, long lastTouchedGameTime) {
         if (server == null) return;
         UpdateStagePayload payload = new UpdateStagePayload(pos, stage, walkedOnCount, threshold, lastTouchedGameTime);
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer player : PlayerLookup.tracking(server.overworld(), ChunkPos.containing(pos))) {
             ServerPlayNetworking.send(player, payload);
         }
     }
